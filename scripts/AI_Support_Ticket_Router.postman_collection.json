@@ -1,0 +1,170 @@
+{
+  "info": {
+    "name": "AI Support Ticket Router",
+    "description": "Postman collection for testing the Vitto AI Support Ticket Router n8n workflow.\n\nEndpoints:\n- Test mode: https://anantvarma.app.n8n.cloud/webhook-test/support-ticket\n- Production: https://anantvarma.app.n8n.cloud/webhook/support-ticket\n\nUsage:\n1. Import this file into Postman\n2. Set the {{base_url}} variable to your n8n instance\n3. Open your workflow in n8n and click 'Listen for test event' on the Webhook node\n4. Send any request from this collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://anantvarma.app.n8n.cloud/webhook-test",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Technical — Critical (Database Down)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Ravi Mehta\",\n  \"email\": \"ravi.mehta@startup.com\",\n  \"subject\": \"URGENT: Production database is down\",\n  \"message\": \"Our production database crashed 20 minutes ago. All API endpoints are returning 500 errors. We are losing customer data and revenue. Please escalate immediately.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Expected routing: #technical-support channel\nExpected priority: urgent\nExpected confidence: > 0.9"
+      }
+    },
+    {
+      "name": "2. Billing — Invoice Request",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Priya Sharma\",\n  \"email\": \"priya@company.co\",\n  \"subject\": \"Need invoice for May 2025\",\n  \"message\": \"Hi, I need a copy of our invoice for May 2025. Can you also update the billing email to finance@company.co? Thanks.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Expected routing: #billing-support channel\nExpected priority: low\nExpected confidence: > 0.9"
+      }
+    },
+    {
+      "name": "3. General — Positive Feedback",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Alex Johnson\",\n  \"email\": \"alex.j@gmail.com\",\n  \"subject\": \"Love the new dashboard\",\n  \"message\": \"Just wanted to say the new analytics dashboard is amazing. The charts are so much clearer now. Great work by the team!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Expected routing: #general-support channel\nExpected priority: low\nExpected confidence: > 0.85"
+      }
+    },
+    {
+      "name": "4. Edge Case — Missing Subject",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@edge-case.com\",\n  \"message\": \"I can't figure out how to export my data to CSV. The button seems to be missing from the settings page.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Edge case: no 'subject' field in payload.\nThe Normalize node should default it to 'No Subject'.\nExpected routing: #technical-support\nExpected priority: medium"
+      }
+    },
+    {
+      "name": "5. Edge Case — Ambiguous (Low Confidence)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Jordan Lee\",\n  \"email\": \"jordan@ambiguous.io\",\n  \"subject\": \"Question\",\n  \"message\": \"Hi, I have a question about my account. Can someone help?\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Edge case: vague message that may produce low AI confidence.\nIf confidence < 0.7, should trigger the fallback path → general queue with needsHumanReview: true"
+      }
+    },
+    {
+      "name": "6. Error — Missing Required Fields",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Broken Request\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Error case: missing both 'email' and 'message' fields.\nExpected: 400 Bad Request with JSON error body.\nThis tests the Validate Required Fields → Respond 400 branch."
+      }
+    },
+    {
+      "name": "7. Error — Empty Body",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/support-ticket",
+          "host": ["{{base_url}}"],
+          "path": ["support-ticket"]
+        },
+        "description": "Error case: completely empty JSON body.\nExpected: 400 Bad Request.\nTests null-safe normalization + validation."
+      }
+    }
+  ]
+}

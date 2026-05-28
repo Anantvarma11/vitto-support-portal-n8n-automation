@@ -1,0 +1,1021 @@
+{
+  "name": "AI Support Ticket Router",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 🎫 AI Support Ticket Router\n\n**Flow:**\n1. Webhook receives support ticket\n2. Normalize & validate fields\n3. Claude AI classifies (billing / technical / general)\n4. Confidence check ≥ 70%\n5. Route to Slack channel\n6. Send Gmail auto-response\n7. Log to Google Sheets\n\n**Credentials to set up:**\n- Anthropic API\n- Slack Bot\n- Gmail OAuth2\n- Google Sheets OAuth2",
+        "color": 2
+      },
+      "id": "7a550380-7f7f-4a13-b24e-f68648f6f024",
+      "name": "Sticky Note ca22e19a",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🤖 AI Classification Node\n\nModel: Claude Sonnet 4.6\n\nOutput Schema:\n- category: billing | technical | general\n- confidence: 0.0-1.0\n- reasoning: string\n- priority: urgent | high | medium | low\n- suggestedResponse: string\n- keywords: string[]\n\nFallback: confidence < 0.7 → general queue + human review flag",
+        "height": 200,
+        "width": 300,
+        "color": 3
+      },
+      "id": "dd7bb398-087e-46fe-8328-7bed52088c96",
+      "name": "Sticky Note 7863e3c2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-ticket",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "06582069-25a8-4644-bfca-a7b0bbc00a2a",
+      "name": "Inbound Ticket Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        48,
+        496
+      ],
+      "webhookId": "9137e2e2-0106-4ee3-ace1-81d21737a2f9"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "ticketId",
+              "value": "={{ $now.toMillis() + \"-\" + ($json.body?.email ?? $json.email ?? \"unknown\") }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "email",
+              "value": "={{ $json.body?.email ?? $json.email ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "name",
+              "value": "={{ $json.body?.name ?? $json.name ?? \"Customer\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "subject",
+              "value": "={{ $json.body?.subject ?? $json.subject ?? \"No Subject\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "message",
+              "value": "={{ $json.body?.message ?? $json.message ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "receivedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "status",
+              "value": "open",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9aa578bf-c3c0-4996-8e77-5af2bf8bf4ef",
+      "name": "Normalize Ticket Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.email }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.message }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "922e71c8-cf6f-4b5a-8b6e-7dab82475dbc",
+      "name": "Validate Required Fields",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        496,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify the following support ticket.\n\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}\n\nRules:\n- billing: payment, invoice, refund, subscription, pricing, charges\n- technical: bugs, errors, login, performance, API, feature broken\n- general: how-to, account info, feature request, feedback\n\nPriority: urgent=service down, high=major feature broken, medium=single user issue, low=general question\n\nReturn JSON: { category, confidence (0-1), reasoning, priority, suggestedResponse, keywords[] }",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "383db4d2-2a73-4026-bfe9-9a50794e8b45",
+      "name": "AI Ticket Classifier",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        720,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-6",
+          "cachedResultName": "Claude Sonnet 4.6"
+        },
+        "options": {}
+      },
+      "id": "084a6844-34d9-4801-8b88-74e11cab1c27",
+      "name": "Claude Sonnet Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        688,
+        464
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"category\": \"technical\", \"confidence\": 0.95, \"reasoning\": \"User reports login failure which is a technical access issue\", \"priority\": \"high\", \"suggestedResponse\": \"Thank you for reporting this. Our technical team will investigate your login issue within 2 hours.\", \"keywords\": [\"login\", \"access\", \"authentication\"] }"
+      },
+      "id": "27022772-3977-4e49-b341-145bb0b65351",
+      "name": "Ticket Classification Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        864,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "ticketId",
+              "value": "={{ $(\"Normalize Ticket Payload\").item.json.ticketId }}",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "email",
+              "value": "={{ $(\"Normalize Ticket Payload\").item.json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "e3",
+              "name": "name",
+              "value": "={{ $(\"Normalize Ticket Payload\").item.json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "e4",
+              "name": "subject",
+              "value": "={{ $(\"Normalize Ticket Payload\").item.json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "e5",
+              "name": "message",
+              "value": "={{ $(\"Normalize Ticket Payload\").item.json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "e6",
+              "name": "receivedAt",
+              "value": "={{ $(\"Normalize Ticket Payload\").item.json.receivedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "e7",
+              "name": "category",
+              "value": "={{ $json.category ?? \"general\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e8",
+              "name": "confidence",
+              "value": "={{ $json.confidence ?? 0.5 }}",
+              "type": "number"
+            },
+            {
+              "id": "e9",
+              "name": "reasoning",
+              "value": "={{ $json.reasoning ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e10",
+              "name": "priority",
+              "value": "={{ $json.priority ?? \"medium\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e11",
+              "name": "suggestedResponse",
+              "value": "={{ $json.suggestedResponse ?? \"We have received your ticket and will respond shortly.\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e12",
+              "name": "keywords",
+              "value": "={{ $json.keywords ?? [] }}",
+              "type": "array"
+            },
+            {
+              "id": "e13",
+              "name": "classifiedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "e14",
+              "name": "status",
+              "value": "classified",
+              "type": "string"
+            },
+            {
+              "id": "e15",
+              "name": "needsHumanReview",
+              "value": "false",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0cf73e80-becf-48a6-baaf-9c34bde9bf48",
+      "name": "Enrich Ticket with Classification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1072,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.confidence }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "rightValue": 0.7
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6ef13e63-f971-4072-abd5-821ad763b977",
+      "name": "Confidence Threshold Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1296,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "billing"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "technical"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "general"
+        }
+      },
+      "id": "fcc9e36e-43fb-4a63-bfd9-fc0bf0fa42c0",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1520,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "billing-channel",
+          "mode": "name"
+        },
+        "text": "={{ \":moneybag: *New BILLING Ticket* [\" + $json.priority.toUpperCase() + \"]\\n*ID:* `\" + $json.ticketId + \"`\\n*From:* \" + $json.name + \" <\" + $json.email + \">\\n*Subject:* \" + $json.subject + \"\\n*Message:* \" + $json.message + \"\\n*AI Confidence:* \" + Math.round($json.confidence * 100) + \"%\\n*Received:* \" + $json.receivedAt }}",
+        "otherOptions": {}
+      },
+      "id": "cef95877-eafc-4b76-a828-e120357d004b",
+      "name": "Slack Billing Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1744,
+        48
+      ],
+      "webhookId": "2f5d5bd0-4378-4f6d-afec-5f7f6084e284",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "t32ywWsoPmLLQKpi",
+          "name": "Slack OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "2d57043a-b262-43d6-ba4b-21a09f22f947",
+      "name": "Merge Routed Tickets",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1968,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "technical-channel",
+          "mode": "name"
+        },
+        "text": "={{ \":wrench: *New TECHNICAL Ticket* [\" + $json.priority.toUpperCase() + \"]\\n*ID:* `\" + $json.ticketId + \"`\\n*From:* \" + $json.name + \" <\" + $json.email + \">\\n*Subject:* \" + $json.subject + \"\\n*Message:* \" + $json.message + \"\\n*AI Confidence:* \" + Math.round($json.confidence * 100) + \"%\\n*Received:* \" + $json.receivedAt }}",
+        "otherOptions": {}
+      },
+      "id": "7515d00b-abba-4f96-b0bc-0600e7e59067",
+      "name": "Slack Technical Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1744,
+        240
+      ],
+      "webhookId": "57b5e41f-3789-4113-8d63-cf7e6ef71815",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "t32ywWsoPmLLQKpi",
+          "name": "Slack OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "general-channel",
+          "mode": "name"
+        },
+        "text": "={{ \":speech_balloon: *New GENERAL Ticket* [\" + $json.priority.toUpperCase() + \"]\\n*ID:* `\" + $json.ticketId + \"`\\n*From:* \" + $json.name + \" <\" + $json.email + \">\\n*Subject:* \" + $json.subject + \"\\n*Message:* \" + $json.message + \"\\n*AI Confidence:* \" + Math.round($json.confidence * 100) + \"%\" + ($json.needsHumanReview === \"true\" ? \"\\n:warning: *NEEDS HUMAN REVIEW*\" : \"\") + \"\\n*Received:* \" + $json.receivedAt }}",
+        "otherOptions": {}
+      },
+      "id": "77677fad-812e-442d-a206-d17ba5a51be5",
+      "name": "Slack General Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1744,
+        448
+      ],
+      "webhookId": "4bcd7cc7-4372-4d96-a08f-7647f5f9baa4",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "t32ywWsoPmLLQKpi",
+          "name": "Slack OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "category",
+              "value": "general",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "priority",
+              "value": "low",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "fallbackReason",
+              "value": "Low confidence — routed to general queue for human review",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "needsHumanReview",
+              "value": "true",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "2b68f5dc-9f2c-42b7-9e6d-d0b7085702b9",
+      "name": "Fallback to General Queue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1520,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"success\": false, \"error\": \"Missing required fields: email and message are required\" }",
+        "options": {}
+      },
+      "id": "e8479635-b7a9-47ec-a0a4-79752e72a292",
+      "name": "Respond 400 Bad Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        784,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"Enrich Ticket with Classification\").item.json.email ?? $(\"Fallback to General Queue\").item.json.email }}\n",
+        "subject": "={{ \"Re: [Ticket #\" + $json.ticketId + \"] \" + $json.subject }}",
+        "emailType": "text",
+        "message": "={{ \"Hi \" + $json.name + \",\\n\\nThank you for contacting support. We have received your ticket.\\n\\n\" + $json.suggestedResponse + \"\\n\\n---\\nTicket Details\\nID: \" + $json.ticketId + \"\\nCategory: \" + $json.category + \"\\nPriority: \" + $json.priority + \"\\nReceived: \" + $json.receivedAt + \"\\n\\nReply to this email to add more information.\\n\\nBest regards,\\nSupport Team\" }}",
+        "options": {}
+      },
+      "id": "2f02fe54-cabb-430e-8f89-0989603507f9",
+      "name": "Send Gmail Confirmation",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2192,
+        256
+      ],
+      "webhookId": "4cb70b13-5331-4723-8213-915c10e01562",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "z0L9l2prkyEwHeTe",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1gVpdRRv7CUyKrlEupjV61f0VIpo6tma8nCgUOz4w0Wc",
+          "mode": "list",
+          "cachedResultName": "Vitto Support Audit Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1gVpdRRv7CUyKrlEupjV61f0VIpo6tma8nCgUOz4w0Wc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Tickets",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "Ticket ID",
+              "displayName": "Ticket ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Confidence",
+              "displayName": "Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reasoning",
+              "displayName": "Reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Received At",
+              "displayName": "Received At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Classified At",
+              "displayName": "Classified At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Needs Review",
+              "displayName": "Needs Review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labelIds",
+              "displayName": "labelIds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "454af43c-205c-45c4-91c1-4af6f960c7b1",
+      "name": "Log Ticket to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2416,
+        256
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "VbRheqfesqWdUesf",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, ticketId: $json.ticketId, category: $json.category, priority: $json.priority, confidence: $json.confidence, message: \"Ticket received. Check email for confirmation.\" }) }}",
+        "options": {}
+      },
+      "id": "8728e1d7-0a40-48b6-b8e8-a600c04401f1",
+      "name": "Respond 200 Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        256
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Inbound Ticket Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Ticket Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Ticket Payload": {
+      "main": [
+        [
+          {
+            "node": "Validate Required Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Required Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Ticket Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400 Bad Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Ticket Classifier": {
+      "main": [
+        [
+          {
+            "node": "Enrich Ticket with Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Sonnet Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Ticket Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket Classification Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Ticket Classifier",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Ticket with Classification": {
+      "main": [
+        [
+          {
+            "node": "Confidence Threshold Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confidence Threshold Check": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback to General Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Slack Billing Channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Technical Channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack General Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Billing Channel": {
+      "main": [
+        [
+          {
+            "node": "Merge Routed Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Routed Tickets": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Technical Channel": {
+      "main": [
+        [
+          {
+            "node": "Merge Routed Tickets",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Slack General Channel": {
+      "main": [
+        [
+          {
+            "node": "Merge Routed Tickets",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fallback to General Queue": {
+      "main": [
+        [
+          {
+            "node": "Slack General Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Log Ticket to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Ticket to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "43317c9b-3594-4c1c-9c6d-9d7b5505bf22",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d3caeaa5361117fa602a1e53648aa757c70cfc5a1895f6c5f20d228b0cfc7f12"
+  },
+  "id": "seWTaAmAp626XV0D",
+  "tags": []
+}
